@@ -28,7 +28,7 @@ def _request_gemini_sync(prompt: str) -> str:
     data_bytes = json.dumps(payload).encode("utf-8")
 
     for current_key in API_KEYS:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={current_key}"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={current_key}"
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
         try:

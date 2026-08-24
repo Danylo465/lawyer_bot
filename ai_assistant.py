@@ -7,14 +7,14 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-RAW_KEYS = os.getenv("GEMINI_API_KEY", "").strip()
-API_KEYS = [k.strip().strip("'\"") for k in RAW_KEYS.split(",") if k.strip()]
-
 
 def _request_gemini_sync(prompt: str) -> str:
-    """Прямий запит до Gemini з детальним поверненням помилки для діагностики."""
-    if not API_KEYS:
-        return "⚠️ Не налаштовано GEMINI_API_KEY."
+    """Динамічне зчитування змінних та прямий HTTP-запит до Gemini."""
+    raw_keys = os.getenv("GEMINI_API_KEY", "").strip()
+    api_keys = [k.strip().strip("'\"") for k in raw_keys.split(",") if k.strip()]
+
+    if not api_keys:
+        return "⚠️ Не налаштовано GEMINI_API_KEY у середовищі Railway."
 
     payload = {
         "contents": [{
@@ -25,15 +25,13 @@ def _request_gemini_sync(prompt: str) -> str:
         }
     }
     data_bytes = json.dumps(payload).encode("utf-8")
-    
-    last_error = "Невідома помилка"
+    last_diagnostic = "Немає відповіді"
 
-    for current_key in API_KEYS:
-        # Перевіряємо обидва варіанти передачі (URL та заголовок)
+    for current_key in api_keys:
+        # Прямий запит до endpoint v1beta
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={current_key}"
         headers = {
-            "Content-Type": "application/json",
-            "x-goog-api-key": current_key
+            "Content-Type": "application/json"
         }
 
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
@@ -45,22 +43,18 @@ def _request_gemini_sync(prompt: str) -> str:
                 if candidates:
                     text = candidates[0]["content"]["parts"][0]["text"]
                     return text.replace("*", "").replace("#", "").replace("`", "").replace("_", "").strip()
+                last_diagnostic = f"Порожня відповідь candidates: {resp_data}"
         except urllib.error.HTTPError as e:
-            err_body = e.read().decode("utf-8", errors="ignore")
-            last_error = f"HTTP {e.code}: {err_body[:200]}"
-            continue
+            body = e.read().decode("utf-8", errors="ignore")
+            last_diagnostic = f"HTTP {e.code}: {body[:250]}"
         except Exception as e:
-            last_error = f"Системна помилка: {repr(e)}"
-            continue
+            last_diagnostic = f"Системний виняток: {repr(e)}"
 
-    return f"⚠️ Деталі помилки Gemini: {last_error}"
+    return f"⚠️ Діагностика API: {last_diagnostic}"
 
 
 async def analyze_legal_case(issue_text: str) -> str:
     """Формує структуровану довідку для адвоката."""
-    if not API_KEYS:
-        return "⚠️ AI-аналітика недоступна (не налаштовано GEMINI_API_KEY)."
-
     if not issue_text or issue_text.strip() in ("", "Не вказано"):
         return "ℹ️ Клієнт не надав опису проблеми."
 
@@ -78,4 +72,4 @@ async def analyze_legal_case(issue_text: str) -> str:
         result = await asyncio.to_thread(_request_gemini_sync, prompt)
         return result
     except Exception as e:
-        return f"Помилка обробки: {repr(e)}"
+        return f"⚠️ Помилка виконання: {repr(e)}"

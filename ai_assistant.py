@@ -12,7 +12,7 @@ API_KEYS = [k.strip().strip("'\"") for k in RAW_KEYS.split(",") if k.strip()]
 
 
 def _request_gemini_sync(prompt: str) -> str:
-    """Прямий HTTP-запит до моделі з підтримкою API-ключів та Bearer токенів."""
+    """Прямий HTTP-запит до моделі через стандартний API-ключ."""
     if not API_KEYS:
         return "⚠️ Не налаштовано GEMINI_API_KEY."
 
@@ -24,19 +24,11 @@ def _request_gemini_sync(prompt: str) -> str:
             "temperature": 0.3
         }
     }
+    headers = {"Content-Type": "application/json"}
     data_bytes = json.dumps(payload).encode("utf-8")
 
     for current_key in API_KEYS:
-        if current_key.startswith("AIzaSy"):
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={current_key}"
-            headers = {"Content-Type": "application/json"}
-        else:
-            url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
-            headers = {
-                "Content-Type": "application/json",
-                "Authorization": f"Bearer {current_key}"
-            }
-
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={current_key}"
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
         try:

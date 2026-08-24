@@ -7,14 +7,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+TARGET_MODEL = "gemini-3.6-flash"
+
 
 def _request_gemini_sync(prompt: str) -> str:
-    """Динамічне зчитування змінних та прямий HTTP-запит до Gemini."""
+    """Прямий запит до актуальної моделі Gemini 3.6 Flash."""
     raw_keys = os.getenv("GEMINI_API_KEY", "").strip()
     api_keys = [k.strip().strip("'\"") for k in raw_keys.split(",") if k.strip()]
 
     if not api_keys:
-        return "⚠️ Не налаштовано GEMINI_API_KEY у середовищі Railway."
+        return "⚠️ Не налаштовано GEMINI_API_KEY."
 
     payload = {
         "contents": [{
@@ -28,12 +30,8 @@ def _request_gemini_sync(prompt: str) -> str:
     last_diagnostic = "Немає відповіді"
 
     for current_key in api_keys:
-        # Прямий запит до endpoint v1beta
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={current_key}"
-        headers = {
-            "Content-Type": "application/json"
-        }
-
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{TARGET_MODEL}:generateContent?key={current_key}"
+        headers = {"Content-Type": "application/json"}
         req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
         try:
@@ -43,12 +41,12 @@ def _request_gemini_sync(prompt: str) -> str:
                 if candidates:
                     text = candidates[0]["content"]["parts"][0]["text"]
                     return text.replace("*", "").replace("#", "").replace("`", "").replace("_", "").strip()
-                last_diagnostic = f"Порожня відповідь candidates: {resp_data}"
+                return f"⚠️ Порожня відповідь від моделі {TARGET_MODEL}."
         except urllib.error.HTTPError as e:
             body = e.read().decode("utf-8", errors="ignore")
-            last_diagnostic = f"HTTP {e.code}: {body[:250]}"
+            last_diagnostic = f"HTTP {e.code} ({TARGET_MODEL}): {body[:250]}"
         except Exception as e:
-            last_diagnostic = f"Системний виняток: {repr(e)}"
+            last_diagnostic = f"Системна помилка: {repr(e)}"
 
     return f"⚠️ Діагностика API: {last_diagnostic}"
 

@@ -12,7 +12,7 @@ API_KEYS = [k.strip().strip("'\"") for k in RAW_KEYS.split(",") if k.strip()]
 
 
 def _request_gemini_sync(prompt: str) -> str:
-    """Універсальний HTTP-запит до моделі через заголовок x-goog-api-key."""
+    """Прямий запит до Gemini з детальним поверненням помилки для діагностики."""
     if not API_KEYS:
         return "⚠️ Не налаштовано GEMINI_API_KEY."
 
@@ -25,9 +25,12 @@ def _request_gemini_sync(prompt: str) -> str:
         }
     }
     data_bytes = json.dumps(payload).encode("utf-8")
-    url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+    
+    last_error = "Невідома помилка"
 
     for current_key in API_KEYS:
+        # Перевіряємо обидва варіанти передачі (URL та заголовок)
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={current_key}"
         headers = {
             "Content-Type": "application/json",
             "x-goog-api-key": current_key
@@ -43,13 +46,14 @@ def _request_gemini_sync(prompt: str) -> str:
                     text = candidates[0]["content"]["parts"][0]["text"]
                     return text.replace("*", "").replace("#", "").replace("`", "").replace("_", "").strip()
         except urllib.error.HTTPError as e:
-            if e.code in (429, 503, 404):
-                continue
-            return f"Помилка API [{e.code}]"
-        except Exception:
+            err_body = e.read().decode("utf-8", errors="ignore")
+            last_error = f"HTTP {e.code}: {err_body[:200]}"
+            continue
+        except Exception as e:
+            last_error = f"Системна помилка: {repr(e)}"
             continue
 
-    return "⚠️ AI-довідка тимчасово недоступна. Зверніться до опису проблеми клієнта."
+    return f"⚠️ Деталі помилки Gemini: {last_error}"
 
 
 async def analyze_legal_case(issue_text: str) -> str:

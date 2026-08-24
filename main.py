@@ -149,9 +149,10 @@ async def process_specialist_choice(callback: types.CallbackQuery, state: FSMCon
     legend_text = (
         f"Ви обрали: **{specialist_name}**\n\n"
         "📅 **Оберіть зручний день для консультації:**\n\n"
-        "🟢 — Є вільні місця для запису\n"
-        "🟡 — Залишилося мало слотів\n"
-        "🔴 — День повністю зайнятий або вихідний\n\n"
+        "🟩 — Є вільні місця для запису\n"
+        "🟨 — Залишилося мало слотів\n"
+        "🟥 — День повністю зайнятий або вихідний\n"
+        "▪️ — Вихідні дні (недоступно для запису)\n\n"
         "_Натисніть на зелений або жовтий день, щоб обрати час._"
     )
 
@@ -270,7 +271,7 @@ async def process_time_choice(callback: types.CallbackQuery, state: FSMContext):
         except Exception as ai_err:
             ai_legal_analysis = f"Не вдалося виконати аналіз: {ai_err}"
 
-        # 4. Текст сповіщення
+        # 4. Текст сповіщення (чистий текст без Markdown, щоб уникнути помилок парсингу)
         admin_text = (
             "🔔 НОВИЙ ЗАПИС НА КОНСУЛЬТАЦІЮ!\n\n"
             f"👤 Клієнт (ПІБ): {fio}\n"
@@ -526,7 +527,7 @@ async def show_admin_calendar_text(message: Message):
         return
     await message.answer(
         "⚙️ **Управління завантаженістю днів (Світлофор)**\n\n"
-        "Натисніть на день, щоб змінити його статус (Заблокувати 🔴 / Відкрити 🟢 / Авто ⚙️):",
+        "Натисніть на день, щоб змінити його статус (Заблокувати 🟥 / Відкрити 🟩 / Авто ⚙️):",
         reply_markup=generate_calendar_keyboard(is_admin=True),
         parse_mode="Markdown"
     )
@@ -551,7 +552,7 @@ async def process_set_day_status(callback: CallbackQuery):
     _, date_str, new_status = callback.data.split(":")
     set_day_status(date_str, new_status)
 
-    status_labels = {"red": "🔴 Заблоковано", "green": "🟢 Відкрито", "auto": "⚙️ Автоматичний режим"}
+    status_labels = {"red": "🟥 Заблоковано", "green": "🟩 Відкрито", "auto": "⚙️ Автоматичний режим"}
     try:
         await callback.answer(f"Статус {date_str} змінено на: {status_labels.get(new_status)}")
     except Exception:

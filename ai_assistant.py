@@ -8,11 +8,11 @@ from dotenv import load_dotenv
 load_dotenv()
 
 RAW_KEYS = os.getenv("GEMINI_API_KEY", "").strip()
-API_KEYS = [k.strip() for k in RAW_KEYS.split(",") if k.strip()]
+API_KEYS = [k.strip().strip("'\"") for k in RAW_KEYS.split(",") if k.strip()]
 
 
 def _request_gemini_sync(prompt: str) -> str:
-    """Прямий HTTP-запит до моделі з підтримкою Bearer токенів."""
+    """Прямий HTTP-запит до моделі з підтримкою API-ключів та Bearer токенів."""
     if not API_KEYS:
         return "⚠️ Не налаштовано GEMINI_API_KEY."
 
@@ -67,7 +67,7 @@ async def analyze_legal_case(issue_text: str) -> str:
     prompt = (
         "Ти помічник українського адвоката. Зроби стислий аналіз проблеми клієнта:\n"
         f"\"{issue_text}\"\n\n"
-        "Сформуй структуру чистим текстом:\n"
+        "Сформуй структуру чистим текстом без зірочок і спецсимволів:\n"
         "1. Галузь права:\n"
         "2. Статті законів та кодексів України:\n"
         "3. Вектор дій адвоката:\n"

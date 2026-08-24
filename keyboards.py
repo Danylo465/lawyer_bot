@@ -136,7 +136,7 @@ MONTH_NAMES = {
 }
 
 
-# 8. ГЕНЕРАТОР КАЛЕНДАРЯ (Світлофор)
+# 8. ГЕНЕРАТОР КАЛЕНДАРЯ (Компактний кольоровий світлофор)
 def generate_calendar_keyboard(year: int = None, month: int = None, is_admin: bool = False, specialist: str = None) -> InlineKeyboardMarkup:
     now = datetime.now()
     if year is None:
@@ -155,20 +155,35 @@ def generate_calendar_keyboard(year: int = None, month: int = None, is_admin: bo
     month_calendar = calendar.monthcalendar(year, month)
     prefix = "admin_date" if is_admin else "user_date"
 
+    COLOR_MAPPING = {
+        "🟢": "🟩",
+        "🟡": "🟨",
+        "🔴": "🟥"
+    }
+
     for week in month_calendar:
         row_buttons = []
-        for day in week:
+        for weekday_idx, day in enumerate(week):
             if day == 0:
                 row_buttons.append(InlineKeyboardButton(text=" ", callback_data="ignore"))
             else:
                 date_str = f"{year}-{month:02d}-{day:02d}"
                 color = get_day_color(date_str, specialist)
-                button_text = f"{color} {day:02d}"
                 
-                if not is_admin and color == "🔴":
+                # Субота (5) та Неділя (6) - вихідні
+                is_weekend = weekday_idx in (5, 6)
+
+                if is_weekend and not is_admin:
+                    button_text = f"▪️{day}"
                     cb_data = "ignore"
                 else:
-                    cb_data = f"{prefix}:{date_str}"
+                    badge = COLOR_MAPPING.get(color, "🟩")
+                    button_text = f"{badge}{day}"
+
+                    if not is_admin and color == "🔴":
+                        cb_data = "ignore"
+                    else:
+                        cb_data = f"{prefix}:{date_str}"
 
                 row_buttons.append(
                     InlineKeyboardButton(
@@ -199,8 +214,8 @@ def generate_calendar_keyboard(year: int = None, month: int = None, is_admin: bo
 def generate_admin_day_menu(date_str: str) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
 
-    builder.button(text="🔴 Заблокувати (Червоний)", callback_data=f"set_status:{date_str}:red")
-    builder.button(text="🟢 Відкрити (Зелений)", callback_data=f"set_status:{date_str}:green")
+    builder.button(text="🟥 Заблокувати (Червоний)", callback_data=f"set_status:{date_str}:red")
+    builder.button(text="🟩 Відкрити (Зелений)", callback_data=f"set_status:{date_str}:green")
     builder.button(text="⚙️ Автоматичний режим", callback_data=f"set_status:{date_str}:auto")
     builder.button(text="📋 Записи на цей день", callback_data=f"view_apps:{date_str}")
     builder.button(text="⬅️ Назад до календаря", callback_data="back_to_admin_cal")

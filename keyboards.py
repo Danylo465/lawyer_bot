@@ -48,38 +48,65 @@ def get_specialists_inline_keyboard() -> InlineKeyboardMarkup:
 # 4. ДИНАМІЧНИЙ ВИБІР ЧАСУ З БЛОКУВАННЯМ ЗАЙНЯТИХ СЛОТІВ (Inline)
 def get_time_slots_keyboard(date_str: str = None, specialist: str = None) -> InlineKeyboardMarkup:
     all_times = ["09:00", "10:00", "11:00", "12:00", "14:00", "15:00", "16:00", "17:00"]
-    booked_times = []
+    booked_times = set()
 
     if date_str:
-        try:
+        # Генеруємо обидва формати дати (YYYY-MM-DD та DD.MM.YYYY)
+        possible_dates = [date_str]
+        if "-" in date_str:
             parts = date_str.split("-")
-            formatted_date = f"{parts[2]}.{parts[1]}.{parts[0]}" if len(parts) == 3 else date_str
-        except Exception:
-            formatted_date = date_str
+            if len(parts) == 3:
+                possible_dates.append(f"{parts[2]}.{parts[1]}.{parts[0]}")
+        elif "." in date_str:
+            parts = date_str.split(".")
+            if len(parts) == 3:
+                possible_dates.append(f"{parts[2]}-{parts[1]}-{parts[0]}")
+
+        # Універсальний пошук спеціаліста
+        spec_pattern = None
+        if specialist:
+            if "денис" in specialist.lower():
+                spec_pattern = "%Денис%"
+            elif "влад" in specialist.lower():
+                spec_pattern = "%Влад%"
+            else:
+                spec_pattern = f"%{specialist.strip()}%"
 
         with sqlite3.connect("bot_database.db") as conn:
             cursor = conn.cursor()
-            if specialist:
-                cursor.execute("""
+            placeholders = ",".join(["?"] * len(possible_dates))
+
+            if spec_pattern:
+                query = f"""
                     SELECT appointment_time FROM appointments 
-                    WHERE (appointment_date = ? OR appointment_date = ?) 
-                      AND specialist = ?
-                      AND status != 'CANCELLED'
-                """, (date_str, formatted_date, specialist))
+                    WHERE appointment_date IN ({placeholders}) 
+                      AND specialist LIKE ?
+                      AND UPPER(status) NOT IN ('CANCELLED', 'REJECTED', 'ВІДХИЛЕНО', 'СКАСОВАНО')
+                """
+                cursor.execute(query, (*possible_dates, spec_pattern))
             else:
-                cursor.execute("""
+                query = f"""
                     SELECT appointment_time FROM appointments 
-                    WHERE (appointment_date = ? OR appointment_date = ?) 
-                      AND status != 'CANCELLED'
-                """, (date_str, formatted_date))
-            
-            booked_times = [row[0] for row in cursor.fetchall()]
+                    WHERE appointment_date IN ({placeholders}) 
+                      AND UPPER(status) NOT IN ('CANCELLED', 'REJECTED', 'ВІДХИЛЕНО', 'СКАСОВАНО')
+                """
+                cursor.execute(query, tuple(possible_dates))
+
+            for row in cursor.fetchall():
+                raw_t = str(row[0]).strip()
+                if len(raw_t) == 4 and raw_t[1] == ':':
+                    raw_t = f"0{raw_t}"
+                elif len(raw_t) > 5:
+                    raw_t = raw_t[:5]
+                booked_times.add(raw_t)
 
     buttons = []
     row = []
 
     for t in all_times:
-        if t in booked_times:
+        is_booked = (t in booked_times) or (t.lstrip("0") in booked_times)
+
+        if is_booked:
             row.append(InlineKeyboardButton(text=f"❌ {t}", callback_data="ignore"))
         else:
             row.append(InlineKeyboardButton(text=t, callback_data=f"time_{t}"))
@@ -170,7 +197,6 @@ def generate_calendar_keyboard(year: int = None, month: int = None, is_admin: bo
                 date_str = f"{year}-{month:02d}-{day:02d}"
                 color = get_day_color(date_str, specialist)
                 
-                # Субота (5) та Неділя (6) - вихідні
                 is_weekend = weekday_idx in (5, 6)
 
                 if is_weekend and not is_admin:

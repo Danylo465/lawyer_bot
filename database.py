@@ -1,4 +1,5 @@
 import sqlite3
+import logging
 from datetime import datetime, timedelta
 
 DB_NAME = "bot_database.db"
@@ -114,62 +115,71 @@ def get_day_color(date_str: str, specialist: str = None) -> str:
     """
     Повертає кольоровий бейдж дня:
     🟩 — 0 записів (вільно)
-    🟨 — від 1 до 7 записів (є хоча б 1 створений/підтверджений запис)
-    🟥 — 8 і більше записів (день повністю заповнений) або ручне блокування
+    🟨 — від 1 до 7 записів
+    🟥 — 8 і більше записів або ручне блокування
     """
-    # 1. Перевіряємо ручний статус від адміна (якщо є таблиця day_statuses)
-    with sqlite3.connect("bot_database.db") as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT status FROM day_statuses WHERE date_str = ?", (date_str,))
-        row = cursor.fetchone()
-        if row:
-            manual_status = row[0]
-            if manual_status == "red":
-                return "🔴"
-            elif manual_status == "green":
-                return "🟢"
+    try:
+        with sqlite3.connect("bot_database.db", timeout=10) as conn:
+            cursor = conn.cursor()
+            
+            # Створюємо таблицю ручних статусів, якщо вона не існує
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS day_statuses (
+                    date_str TEXT PRIMARY KEY,
+                    status TEXT
+                )
+            """)
+            
+            cursor.execute("SELECT status FROM day_statuses WHERE date_str = ?", (date_str,))
+            row = cursor.fetchone()
+            if row:
+                if row[0] == "red":
+                    return "🔴"
+                elif row[0] == "green":
+                    return "🟢"
 
-        # 2. Перевіряємо формати дати
-        possible_dates = [date_str]
-        if "-" in date_str:
-            parts = date_str.split("-")
-            if len(parts) == 3:
-                possible_dates.append(f"{parts[2]}.{parts[1]}.{parts[0]}")
-        elif "." in date_str:
-            parts = date_str.split(".")
-            if len(parts) == 3:
-                possible_dates.append(f"{parts[2]}-{parts[1]}-{parts[0]}")
+            # Можливі формати дати
+            possible_dates = [date_str]
+            if "-" in date_str:
+                parts = date_str.split("-")
+                if len(parts) == 3:
+                    possible_dates.append(f"{parts[2]}.{parts[1]}.{parts[0]}")
+            elif "." in date_str:
+                parts = date_str.split(".")
+                if len(parts) == 3:
+                    possible_dates.append(f"{parts[2]}-{parts[1]}-{parts[0]}")
 
-        placeholders = ",".join(["?"] * len(possible_dates))
+            placeholders = ",".join(["?"] * len(possible_dates))
 
-        # 3. Рахуємо записи без скасованих
-        if specialist:
-            spec_pattern = "%Денис%" if "денис" in specialist.lower() else "%Влад%" if "влад" in specialist.lower() else f"%{specialist.strip()}%"
-            query = f"""
-                SELECT COUNT(*) FROM appointments
-                WHERE appointment_date IN ({placeholders})
-                  AND specialist LIKE ?
-                  AND UPPER(status) NOT IN ('CANCELLED', 'REJECTED', 'ВІДХИЛЕНО', 'СКАСОВАНО')
-            """
-            cursor.execute(query, (*possible_dates, spec_pattern))
+            if specialist:
+                spec_pattern = "%Денис%" if "денис" in specialist.lower() else "%Влад%" if "влад" in specialist.lower() else f"%{specialist.strip()}%"
+                query = f"""
+                    SELECT COUNT(*) FROM appointments
+                    WHERE appointment_date IN ({placeholders})
+                      AND specialist LIKE ?
+                      AND UPPER(status) NOT IN ('CANCELLED', 'REJECTED', 'ВІДХИЛЕНО', 'СКАСОВАНО')
+                """
+                cursor.execute(query, (*possible_dates, spec_pattern))
+            else:
+                query = f"""
+                    SELECT COUNT(*) FROM appointments
+                    WHERE appointment_date IN ({placeholders})
+                      AND UPPER(status) NOT IN ('CANCELLED', 'REJECTED', 'ВІДХИЛЕНО', 'СКАСОВАНО')
+                """
+                cursor.execute(query, tuple(possible_dates))
+
+            count = cursor.fetchone()[0]
+
+        if count == 0:
+            return "🟢"
+        elif count >= 8:
+            return "🔴"
         else:
-            query = f"""
-                SELECT COUNT(*) FROM appointments
-                WHERE appointment_date IN ({placeholders})
-                  AND UPPER(status) NOT IN ('CANCELLED', 'REJECTED', 'ВІДХИЛЕНО', 'СКАСОВАНО')
-            """
-            cursor.execute(query, tuple(possible_dates))
+            return "🟡"
 
-        count = cursor.fetchone()[0]
-
-    # Градація кольорів:
-    if count == 0:
+    except Exception as e:
+        logging.error(f"Помилка в get_day_color: {e}")
         return "🟢"
-    elif count >= 8:
-        return "🔴"
-    else:
-        # Від 1 до 7 записів день світиться жовтим
-        return "🟡"
 
 
 def set_day_status(date_str: str, status: str, note: str = None):

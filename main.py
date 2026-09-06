@@ -170,12 +170,15 @@ async def process_specialist_choice(callback: types.CallbackQuery, state: FSMCon
         )
     except Exception as err:
         logging.error(f"Помилка при відображенні календаря: {err}")
-        # Якщо edit_text впав, відправляємо новим повідомленням
-        await callback.message.answer(
-            legend_text,
-            reply_markup=cal_markup,
-            parse_mode="Markdown"
-        )
+        try:
+            cal_markup = generate_calendar_keyboard(is_admin=False, specialist=specialist_name)
+            await callback.message.answer(
+                legend_text,
+                reply_markup=cal_markup,
+                parse_mode="Markdown"
+            )
+        except Exception as send_err:
+            logging.error(f"Критична помилка відправки календаря: {send_err}")
 
 
 # ==========================================

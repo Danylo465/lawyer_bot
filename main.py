@@ -138,8 +138,13 @@ async def process_issue(message: types.Message, state: FSMContext):
     )
 
 
-@dp.callback_query(F.data.startswith("select_spec_"), BookingState.choosing_specialist)
+@dp.callback_query(F.data.startswith("select_spec_"))
 async def process_specialist_choice(callback: types.CallbackQuery, state: FSMContext):
+    try:
+        await callback.answer()
+    except Exception:
+        pass
+
     spec_code = callback.data.split("_")[2]
     specialist_name = "Адвокат Денис 👨‍⚖️" if spec_code == "denis" else "Адвокат Влад 👨‍⚖️"
 
@@ -156,15 +161,21 @@ async def process_specialist_choice(callback: types.CallbackQuery, state: FSMCon
         "_Натисніть на зелений або жовтий день, щоб обрати час._"
     )
 
-    await callback.message.edit_text(
-        legend_text,
-        reply_markup=generate_calendar_keyboard(is_admin=False, specialist=specialist_name),
-        parse_mode="Markdown"
-    )
     try:
-        await callback.answer()
-    except Exception:
-        pass
+        cal_markup = generate_calendar_keyboard(is_admin=False, specialist=specialist_name)
+        await callback.message.edit_text(
+            legend_text,
+            reply_markup=cal_markup,
+            parse_mode="Markdown"
+        )
+    except Exception as err:
+        logging.error(f"Помилка при відображенні календаря: {err}")
+        # Якщо edit_text впав, відправляємо новим повідомленням
+        await callback.message.answer(
+            legend_text,
+            reply_markup=cal_markup,
+            parse_mode="Markdown"
+        )
 
 
 # ==========================================

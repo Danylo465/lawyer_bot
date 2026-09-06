@@ -11,7 +11,7 @@ TARGET_MODEL = "gemini-3.6-flash"
 
 
 def _request_gemini_sync(prompt: str) -> str:
-    """Прямий запит до актуальної моделі Gemini 3.6 Flash."""
+    """Прямий запит до моделі Gemini 3.6 Flash із розширеним таймаутом."""
     raw_keys = os.getenv("GEMINI_API_KEY", "").strip()
     api_keys = [k.strip().strip("'\"") for k in raw_keys.split(",") if k.strip()]
 
@@ -32,21 +32,29 @@ def _request_gemini_sync(prompt: str) -> str:
     for current_key in api_keys:
         url = f"https://generativelanguage.googleapis.com/v1beta/models/{TARGET_MODEL}:generateContent?key={current_key}"
         headers = {"Content-Type": "application/json"}
-        req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
 
-        try:
-            with urllib.request.urlopen(req, timeout=20) as response:
-                resp_data = json.loads(response.read().decode("utf-8"))
-                candidates = resp_data.get("candidates", [])
-                if candidates:
-                    text = candidates[0]["content"]["parts"][0]["text"]
-                    return text.replace("*", "").replace("#", "").replace("`", "").replace("_", "").strip()
-                return f"⚠️ Порожня відповідь від моделі {TARGET_MODEL}."
-        except urllib.error.HTTPError as e:
-            body = e.read().decode("utf-8", errors="ignore")
-            last_diagnostic = f"HTTP {e.code} ({TARGET_MODEL}): {body[:250]}"
-        except Exception as e:
-            last_diagnostic = f"Системна помилка: {repr(e)}"
+        # До 2 спроб у разі нестабільного з'єднання
+        for attempt in range(2):
+            req = urllib.request.Request(url, data=data_bytes, headers=headers, method="POST")
+            try:
+                # Збільшуємо таймаут до 45 секунд
+                with urllib.request.urlopen(req, timeout=45) as response:
+                    resp_data = json.loads(response.read().decode("utf-8"))
+                    candidates = resp_data.get("candidates", [])
+                    if candidates:
+                        text = candidates[0]["content"]["parts"][0]["text"]
+                        return text.replace("*", "").replace("#", "").replace("`", "").replace("_", "").strip()
+                    return f"⚠️ Порожня відповідь від моделі {TARGET_MODEL}."
+            except urllib.error.HTTPError as e:
+                body = e.read().decode("utf-8", errors="ignore")
+                last_diagnostic = f"HTTP {e.code} ({TARGET_MODEL}): {body[:250]}"
+                break
+            except TimeoutError:
+                last_diagnostic = f"Таймаут відповіді (спроба {attempt + 1}/2)"
+                continue
+            except Exception as e:
+                last_diagnostic = f"Системна помилка: {repr(e)}"
+                break
 
     return f"⚠️ Діагностика API: {last_diagnostic}"
 
